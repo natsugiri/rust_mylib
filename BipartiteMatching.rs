@@ -1,6 +1,6 @@
 mod bipartite_matching {
     // Hopcroft-Karp algorithm;
-    // from_left(x) = y <=> from_right[y] = x
+    // from_left(x) = y <=> from_right(y) = x
     // O(E sqrt(V));
 
     #[derive(Debug)]
