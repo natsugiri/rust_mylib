@@ -1,13 +1,13 @@
 mod mod_int {
     use std::ops::*;
 
-    #[derive(Clone, Copy, Default, Debug)]
+    #[derive(Clone, Copy, Default, Debug, PartialEq)]
     pub struct ModInt<const M: u64>(u32);
 
     pub type ModInt998244353 = ModInt::<998244353>;
     pub type ModInt1000000007 = ModInt::<1000000007>;
 
-    trait ModIntTrait: Copy + Default + Mul<Output=Self> + From<i64> {
+    pub trait ModIntTrait: Copy + Default + Mul<Output=Self> + From<i64> {
 	const ZERO: Self;
 	const ONE: Self;
 
@@ -26,10 +26,15 @@ mod mod_int {
     impl<const M: u64> ModInt<M> {
 	pub const ZERO: Self = Self(0);
 	pub const ONE: Self = Self(1);
+	pub const MOD : u64 = M;
 
         pub fn new(a: u64) -> Self {
             Self((a % M) as u32)
         }
+
+	pub fn raw(a: u32) -> Self {
+	    Self(a)
+	}
 
         pub fn getu(&self) -> u32 {
             self.0
