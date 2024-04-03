@@ -116,6 +116,13 @@ mod mod_int {
         }
     }
 
+    impl<const M: u64> Neg for ModInt<M> {
+	type Output = Self;
+	fn neg(self) -> Self {
+	    if self.0 == 0 { ModInt::ZERO } else { Self(M as u32 - self.0) }
+	}
+    }
+
     impl<const M: u64> From<i64> for ModInt<M> {
         fn from(mut a: i64) -> Self {
             let m = M as i64;
@@ -165,3 +172,4 @@ mod mod_int {
 	}
     }
 }
+type Mint = mod_int::ModInt998244353;
