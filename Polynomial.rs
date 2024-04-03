@@ -11,13 +11,14 @@ mod polynomial {
 	    Self(Vec::new())
 	}
 
-	pub fn from(v: Vec<Mint>) -> Self {
+	pub fn from(mut v: Vec<Mint>) -> Self {
+	    while Some(&Mint::ZERO) == v.last() { v.pop(); }
 	    Self(v)
 	}
 
 	pub fn is_zero(&self) -> bool {
 	    for &m in &self.0 {
-		if m == Mint::ZERO {
+		if m != Mint::ZERO {
 		    return false;
 		}
 	    }
@@ -165,10 +166,7 @@ mod polynomial {
     impl Add for Polynomial {
 	type Output = Polynomial;
 	fn add(self, other: Self) -> Polynomial {
-	    let mut v = vec![Mint::ZERO; self.0.len().max(other.0.len())];
-	    for i in 0..self.0.len() { v[i] = self.0[i]; }
-	    for i in 0..other.0.len() { v[i] += other.0[i]; }
-	    Polynomial(v)
+	    &self + &other
 	}
     }
 
@@ -178,7 +176,7 @@ mod polynomial {
 	    let mut v = vec![Mint::ZERO; self.0.len().max(other.0.len())];
 	    for i in 0..self.0.len() { v[i] = self.0[i]; }
 	    for i in 0..other.0.len() { v[i] += other.0[i]; }
-	    Polynomial(v)
+	    Polynomial::from(v)
 	}
     }
 
@@ -192,10 +190,7 @@ mod polynomial {
     impl Sub for Polynomial {
 	type Output = Polynomial;
 	fn sub(self, other: Self) -> Polynomial {
-	    let mut v = vec![Mint::ZERO; self.0.len().max(other.0.len())];
-	    for i in 0..self.0.len() { v[i] = self.0[i]; }
-	    for i in 0..other.0.len() { v[i] -= other.0[i]; }
-	    Polynomial(v)
+	    &self - &other
 	}
     }
 
@@ -205,7 +200,7 @@ mod polynomial {
 	    let mut v = vec![Mint::ZERO; self.0.len().max(other.0.len())];
 	    for i in 0..self.0.len() { v[i] = self.0[i]; }
 	    for i in 0..other.0.len() { v[i] -= other.0[i]; }
-	    Polynomial(v)
+	    Polynomial::from(v)
 	}
     }
 
@@ -236,29 +231,34 @@ mod polynomial {
 	}
     }
 
+    impl Mul<Mint> for Polynomial {
+	type Output = Polynomial;
+	fn mul(self, other: Mint) -> Self {
+	    &self * other
+	}
+    }
+
     impl Mul<Mint> for &Polynomial {
 	type Output = Polynomial;
 	fn mul(self, other: Mint) -> Polynomial {
 	    if other == Mint::ZERO {
 		Polynomial::new()
 	    } else {
-		let mut z = Polynomial(self.0.iter().map(|&x| x * other).collect());
-		z.normal();
-		z
+		Polynomial::from(self.0.iter().map(|&x| x * other).collect())
 	    }
 	}
     }
 
-    impl Mul<Mint> for Polynomial {
-	type Output = Polynomial;
-	fn mul(self, other: Mint) -> Polynomial {
-	    if other == Mint::ZERO {
-		Polynomial::new()
-	    } else {
-		let mut z = Polynomial(self.0.iter().map(|&x| x * other).collect());
-		z.normal();
-		z
-	    }
+    impl MulAssign<Mint> for Polynomial {
+	fn mul_assign(&mut self, other: Mint) {
+	    *self = &*self * other;
+	}
+    }
+
+    impl Neg for Polynomial {
+	type Output = Self;
+	fn neg(self) -> Self {
+	    Polynomial::from(self.0.iter().map(|&x| -x).collect())
 	}
     }
 
@@ -313,7 +313,72 @@ mod polynomial {
 	x
     }
 
-    pub fn convolution(x: &Polynomial, y: &Polynomial) -> Polynomial {
-	Polynomial::from(convolution_impl(x.0.to_vec(), y.0.to_vec()))
+    fn convolution(x: &Polynomial, y: &Polynomial) -> Polynomial {
+	if x.is_zero() || y.is_zero() {
+	    Polynomial::new()
+	} else {
+	    Polynomial::from(convolution_impl(x.0.to_vec(), y.0.to_vec()))
+	}
+    }
+
+    pub mod product {
+	use super::Polynomial;
+	use std::cmp::Ordering;
+
+	#[derive(Debug)]
+	struct Entry(Polynomial);
+
+	impl Entry {
+	    fn len(&self) -> usize { self.0.0.len() }
+	}
+
+	impl PartialOrd for Entry {
+	    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+	}
+
+	impl PartialEq for Entry {
+	    fn eq(&self, other: &Self) -> bool { false }
+	}
+
+	impl Eq for Entry {}
+
+	impl Ord for Entry {
+	    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		// Reversed;
+		other.len().cmp(&self.len()) 
+	    }
+	}
+
+	#[derive(Debug)]
+	pub struct Product {
+	    heap: std::collections::BinaryHeap::<Entry>,
+	}
+
+	impl Product {
+	    pub fn new() -> Self {
+		Self { heap: std::collections::BinaryHeap::new() }
+	    }
+
+	    pub fn push(&mut self, p: Polynomial) {
+		self.heap.push(Entry(p));
+	    }
+
+	    pub fn product_mod_xk(&mut self, k: usize) -> Polynomial {
+		loop {
+		    if let Some(p) = self.heap.pop() {
+			if let Some(q) = self.heap.pop() {
+			    self.heap.push(Entry((p.0 * q.0).mod_xk(k)));
+			} else {
+			    return p.0;
+			}
+		    } else {
+			let mut p = Polynomial::new();
+			p.set(0, super::Mint::ONE);
+			p.mod_xk(k);
+			return p;
+		    }
+		}
+	    }
+	}
     }
 }
