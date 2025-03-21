@@ -9,20 +9,19 @@ mod rmq {
     #[derive(Debug)]
     // d[i]: {左の最小値}-{右の最小値}
     pub struct Rmq<T: NumTrait> {
-	min_value: T,
 	d: Vec<T>,
     }
 
     impl<T: NumTrait> From<usize> for Rmq<T> {
 	fn from(n: usize) -> Self {
-	    Self { min_value: T::default(), d: vec![T::default(); n] }
+	    Self { d: vec![T::default(); n] }
 	}
     }
 
     impl<T: NumTrait> From<&Vec<T>> for Rmq<T> {
 	fn from(a: &Vec<T>) -> Self {
 	    if a.is_empty() {
-		return Self { min_value: T::default(), d: vec![] };
+		return Self { d: vec![] };
 	    }
 	    let mut d = vec![T::default(); a.len()];
 	    let mut m = 1;
@@ -41,7 +40,7 @@ mod rmq {
 		d[k / 2] = val;
 		j -= 1;
 	    }
-	    Self { min_value: d[0], d }
+	    Self { d }
 	}
     }
 
@@ -59,7 +58,7 @@ mod rmq {
 
 	pub fn add(&mut self, w: Range<usize>, x: T) {
 	    if w == (0..self.d.len()) {
-		self.min_value = self.min_value + x;
+		self.d[0] = self.d[0] + x;
 		return;
 	    }
 	    let d = &mut self.d;
@@ -67,37 +66,21 @@ mod rmq {
 	    let mut radd = T::default();
 	    let mut l = w.start + d.len();
 	    let mut r = w.end + d.len();
-	    while l < r || r % 2 == 0 {
+	    while l > 2 || r > 1 {
 		if l % 2 == 1 {
-		    l += 1;
-		    ladd = Self::add_helper(&mut d[l/2-1], ladd, x);
-		} else {
+		    ladd = Self::add_helper(&mut d[l/2], ladd, if l < r { x } else { T::default() });
+		} else if l > 2 {
 		    ladd = Self::add_helper(&mut d[l/2-1], T::default(), ladd);
 		}
 		if r % 2 == 1 {
-		    radd = Self::add_helper(&mut d[r/2], x, radd);
+		    radd = Self::add_helper(&mut d[r/2], if l < r { x } else { T::default() }, radd);
 		} else if r < d.len() * 2 {
 		    radd = Self::add_helper(&mut d[r/2], radd, T::default());
 		}
-		l /= 2;
+		l = (l + 1) / 2;
 		r /= 2;
 	    }
-	    if r == 1 {
-		radd = ladd.min(radd);
-	    } else {
-		radd = Self::add_helper(&mut d[r/2], ladd, radd);
-		r /= 2;
-		while r > 1 {
-		    if r % 2 == 1 {
-			radd = Self::add_helper(&mut d[r/2], T::default(), radd);
-		    } else {
-			radd = Self::add_helper(&mut d[r/2], radd, T::default());
-		    }
-		    r /= 2;
-		}
-	    }
-	    assert!(r == 1);
-	    self.min_value = self.min_value + radd;
+	    self.d[0] = self.d[0] + ladd + radd;
 	}
 
 	// ladd: 左の子の増加量
@@ -116,71 +99,45 @@ mod rmq {
 
 	pub fn min(&mut self, w: Range<usize>) -> T {
 	    if w == (0..self.d.len()) {
-		return self.min_value;
+		return self.d[0];
 	    }
 	    let d = &self.d;
 	    let mut lval: Option<T> = None;
 	    let mut rval: Option<T> = None;
 	    let mut l = w.start + d.len();
 	    let mut r = w.end + d.len();
-	    while l < r || r % 2 == 0 {
+	    while l > 2 || r > 1 {
 		if l & 1 == 1 {
-		    l += 1;
-		    lval = Self::eval(lval, Some(T::default()), d[l/2-1]);
-		} else if lval.is_some() {
-		    lval = Self::apply_minus(lval, d[l/2-1]);
+		    lval = Self::eval(d[l/2], lval, if l<r {Some(T::default())} else {None});
+		} else if l > 2 {
+		    lval = Self::eval(d[l/2-1], None, lval);
 		}
 		if r & 1 == 1 {
-		    rval = Self::eval(Some(T::default()), rval, d[r/2]);
+		    rval = Self::eval(d[r/2], if l<r {Some(T::default())} else {None}, rval);
 		} else if rval.is_some() {
-		    rval = Self::apply_plus(rval, d[r/2]);
+		    rval = Self::eval(d[r/2], rval, None);
 		}
-		l /= 2;
+		l = (l+1)/2;
 		r /= 2;
 	    }
-	    if r == 1 {
-		rval = Self::eval(lval, rval, T::default());
-	    } else {
-		rval = Self::eval(lval, rval, d[r/2]);
-		r /= 2;
-		while r > 1 {
-		    if r & 1 == 1 {
-			rval = Self::apply_minus(rval, d[r/2]);
-		    } else {
-			rval = Self::apply_plus(rval, d[r/2]);
-		    }
-		    r /= 2;
-		}
-	    }
-	    match rval {
-		Some(val) => val + self.min_value,
-		None => self.min_value,
+	    self.d[0] + match (lval, rval) {
+		(None, None) => T::default(),
+		(Some(x), None) => x,
+		(None, Some(y)) => y,
+		(Some(x), Some(y)) => x.min(y),
 	    }
 	}
 
-	fn eval(mut lch: Option<T>, mut rch: Option<T>, diff: T) -> Option<T> {
-	    lch = Self::apply_plus(lch, diff);
-	    rch = Self::apply_minus(rch, diff);
-	    match (lch, rch) {
+	fn eval(diff: T, mut lval: Option<T>, mut rval: Option<T>) -> Option<T> {
+	    if diff > T::default() && lval.is_some() { lval = Some(lval.unwrap() + diff); }
+	    if diff < T::default() && rval.is_some() { rval = Some(rval.unwrap() - diff); }
+	    match (lval, rval) {
 		(Some(x), Some(y)) => Some(x.min(y)),
-		_ => lch.or(rch),
-	    }
-	}
-
-	fn apply_plus(lval: Option<T>, diff: T) -> Option<T> {
-	    match lval {
-		Some(x) if diff > T::default() => Some(x + diff),
-		_ => lval,
-	    }
-	}
-
-	fn apply_minus(rval: Option<T>, diff: T) -> Option<T> {
-	    match rval {
-		Some(x) if diff < T::default() => Some(x - diff),
-		_ => rval,
+		_ => lval.or(rval),
 	    }
 	}
     }
+
 
     #[derive(Debug)]
     pub struct Rxq<T: NumTrait + Neg<Output=T>>(Rmq<T>);
@@ -193,11 +150,18 @@ mod rmq {
 
     impl<T: NumTrait + Neg<Output=T>> From<&Vec<T>> for Rxq<T> {
 	fn from(a: &Vec<T>) -> Self {
-	    Self(Rmq::<T>::from(a))
+	    let b = a.iter().map(|&x| -x).collect();
+	    Self(Rmq::<T>::from(&b))
 	}
     }
 
     impl<T: NumTrait + Neg<Output=T>> Rxq<T> {
+	pub fn new() -> Self { Self::from(0) }
+
+	pub fn get(&mut self, i: usize) -> T {
+	    -self.0.get(i)
+	}
+
 	pub fn add(&mut self, w: Range<usize>, x: T) {
 	    self.0.add(w, -x);
 	}
